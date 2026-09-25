@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Nova Drift",
+    "slug": "nova-drift",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0a0e1f"
+    },
+    "ios": {
+      "bundleIdentifier": "com.SENIN_ADIN.novadrift",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSGameCenterUsageDescription": "Skorlarını Game Center liderlik tablosunda göstermek için."
+      }
+    },
+    "android": {
+      "package": "com.SENIN_ADIN.novadrift"
+    },
+    "plugins": [
+      "react-native-game-center"
+    ]
+  }
+}
