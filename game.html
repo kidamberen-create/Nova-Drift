@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nova Drift</title>
+<style>
+:root{
+  --bg:#0a0e1f; --bg2:#141a33; --accent:#6ee7ff; --accent2:#ff7ab8;
+  --star:#ffe9a8; --text:#eaf0ff; --dim:#7d88b8;
+  --safe-t: env(safe-area-inset-top,0px); --safe-b: env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{height:100%; margin:0; background:var(--bg); overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--text);}
+#app{position:relative; width:100%; height:100%; padding-top:var(--safe-t); padding-bottom:var(--safe-b);}
+.screen{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; transition:opacity .3s ease;}
+.hidden{display:none;}
+
+/* Starfield */
+#stars{position:fixed; inset:0; z-index:0;}
+
+/* Login screen */
+#login{z-index:5; text-align:center; gap:14px;}
+.logo{font-size:44px; font-weight:800; letter-spacing:-1px; background:linear-gradient(120deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; margin-bottom:2px;}
+.tagline{color:var(--dim); font-size:14px; margin-bottom:28px;}
+.btn{width:min(320px,80vw); padding:15px 18px; border-radius:14px; border:none; font-size:16px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; transition:transform .12s ease;}
+.btn:active{transform:scale(0.96);}
+.btn-gc{background:#000; color:#fff; border:1px solid #333;}
+.btn-gc svg{width:20px;height:20px;}
+.divider{width:min(320px,80vw); display:flex; align-items:center; gap:10px; color:var(--dim); font-size:12px; margin:14px 0;}
+.divider::before,.divider::after{content:""; flex:1; height:1px; background:#2a3358;}
+input[type=email]{width:min(320px,80vw); padding:14px 16px; border-radius:14px; border:1px solid #2a3358; background:#101736; color:var(--text); font-size:15px; outline:none;}
+input[type=email]:focus{border-color:var(--accent);}
+.btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent2)); color:#0a0e1f;}
+.skip{margin-top:10px; color:var(--dim); font-size:13px; text-decoration:underline; cursor:pointer; background:none; border:none;}
+
+/* Menu */
+#menu{z-index:5; gap:16px;}
+.big-title{font-size:36px; font-weight:800;}
+.hi{color:var(--dim); font-size:14px; margin-top:-8px;}
+.best{font-size:13px; color:var(--star); margin-bottom:10px;}
+.play{width:min(220px,70vw); padding:18px; border-radius:50px; font-size:18px;}
+
+/* Game */
+#game{z-index:5; inset:0; padding:0;}
+#hud{position:absolute; top:calc(14px + var(--safe-t)); left:0; right:0; display:flex; justify-content:space-between; padding:0 18px; z-index:6; pointer-events:none;}
+#score{font-size:26px; font-weight:800;}
+#phaseLabel{font-size:12px; color:var(--dim); background:#101736cc; padding:6px 12px; border-radius:20px; align-self:flex-start;}
+canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none;}
+
+/* Game over */
+#over{z-index:6; gap:10px; text-align:center;}
+.overScore{font-size:52px; font-weight:800; background:linear-gradient(120deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.overLabel{color:var(--dim); font-size:14px; margin-top:-6px;}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="stars"></canvas>
+
+<!-- LOGIN -->
+<div id="login" class="screen">
+  <div class="logo">NOVA DRIFT</div>
+  <div class="tagline">yıldızlar arasında sürüklen</div>
+  <button class="btn btn-gc" id="gcBtn">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    Game Center ile Giriş Yap
+  </button>
+  <div class="divider">veya</div>
+  <input type="email" id="emailInput" placeholder="E-posta adresin">
+  <button class="btn btn-primary" id="emailBtn" style="width:min(320px,80vw);">E-posta ile Devam Et</button>
+  <button class="skip" id="skipBtn">Şimdilik atla</button>
+</div>
+
+<!-- MENU -->
+<div id="menu" class="screen hidden">
+  <div class="big-title">NOVA DRIFT</div>
+  <div class="hi" id="hiText">Hoş geldin</div>
+  <div class="best" id="bestText">En iyi skor: 0</div>
+  <button class="btn btn-primary play" id="playBtn">OYNA</button>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen hidden">
+  <div id="hud">
+    <div id="score">0</div>
+    <div id="phaseLabel">ZIPLA</div>
+  </div>
+  <canvas id="gc"></canvas>
+</div>
+
+<!-- OVER -->
+<div id="over" class="screen hidden">
+  <div class="overLabel">SKOR</div>
+  <div class="overScore" id="overScore">0</div>
+  <div class="best" id="overBest">En iyi skor: 0</div>
+  <button class="btn btn-primary play" id="retryBtn">TEKRAR OYNA</button>
+</div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+// ---------- storage helpers ----------
+function loadBest(){ try{ return parseInt(localStorage.getItem('nova_best')||'0',10); }catch(e){ return 0; } }
+function saveBest(v){ try{ localStorage.setItem('nova_best', String(v)); }catch(e){} }
+function loadName(){ try{ return localStorage.getItem('nova_name')||''; }catch(e){ return ''; } }
+function saveName(n){ try{ localStorage.setItem('nova_name', n); }catch(e){} }
+
+// ---------- screens ----------
+const screens = { login:document.getElementById('login'), menu:document.getElementById('menu'),
+  game:document.getElementById('game'), over:document.getElementById('over') };
+function show(name){ Object.values(screens).forEach(s=>s.classList.add('hidden')); screens[name].classList.remove('hidden'); }
+
+function enterMenu(){
+  const n = loadName();
+  document.getElementById('hiText').textContent = n ? ('Hoş geldin, ' + n) : 'Hoş geldin';
+  document.getElementById('bestText').textContent = 'En iyi skor: ' + loadBest();
+  show('menu');
+}
+
+document.getElementById('gcBtn').onclick = function(){
+  // Native uygulama içindeyse gerçek Game Center girişini iste
+  if(window.ReactNativeWebView){
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'GAME_CENTER_LOGIN'}));
+  } else {
+    saveName('Oyuncu'); enterMenu(); // tarayıcıda test için simülasyon
+  }
+};
+// React Native'den gelen mesajları dinle (Game Center giriş sonucu, skor gönderimi vb.)
+document.addEventListener('message', handleNativeMessage); // Android
+window.addEventListener('message', handleNativeMessage); // iOS
+function handleNativeMessage(e){
+  try{
+    const data = JSON.parse(e.data);
+    if(data.type==='GAME_CENTER_RESULT' && data.success){
+      saveName(data.playerName || 'Oyuncu');
+      enterMenu();
+    }
+  }catch(err){}
+}
+// Oyun bittiğinde skoru native tarafa gönder (Game Center liderlik tablosu için)
+function reportScoreToNative(finalScore){
+  if(window.ReactNativeWebView){
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'SUBMIT_SCORE', score:finalScore}));
+  }
+}
+document.getElementById('emailBtn').onclick = function(){
+  const v = document.getElementById('emailInput').value.trim();
+  saveName(v ? v.split('@')[0] : 'Oyuncu');
+  enterMenu();
+};
+document.getElementById('skipBtn').onclick = function(){ enterMenu(); };
+
+if(loadName()){ enterMenu(); } else { show('login'); }
+
+document.getElementById('playBtn').onclick = startGame;
+document.getElementById('retryBtn').onclick = startGame;
+
+// ---------- starfield background ----------
+const starCv = document.getElementById('stars');
+const sctx = starCv.getContext('2d');
+let stars = [];
+function resizeStars(){
+  starCv.width = innerWidth; starCv.height = innerHeight;
+  stars = Array.from({length:90}, ()=>({x:Math.random()*innerWidth, y:Math.random()*innerHeight, r:Math.random()*1.6+0.3, s:Math.random()*0.4+0.1}));
+}
+resizeStars(); addEventListener('resize', resizeStars);
+function drawStars(){
+  sctx.fillStyle = '#0a0e1f'; sctx.fillRect(0,0,starCv.width,starCv.height);
+  sctx.fillStyle = '#ffe9a8';
+  for(const st of stars){ st.y += st.s; if(st.y>starCv.height){st.y=0; st.x=Math.random()*starCv.width;}
+    sctx.globalAlpha = 0.5+Math.random()*0.5; sctx.beginPath(); sctx.arc(st.x,st.y,st.r,0,7); sctx.fill(); }
+  sctx.globalAlpha = 1;
+  requestAnimationFrame(drawStars);
+}
+drawStars();
+
+// ---------- game ----------
+const cv = document.getElementById('gc');
+const ctx = cv.getContext('2d');
+let W,H,DPR;
+function resizeGame(){
+  DPR = Math.min(devicePixelRatio||1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W*DPR; cv.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+addEventListener('resize', resizeGame);
+
+let running=false, score=0, t=0, phaseIdx=0, phaseTimer=0;
+const PHASES=['jump','swipe','grow','draw'];
+const PHASE_LABEL={jump:'ZIPLA', swipe:'KAYDIR', grow:'BÜYÜT', draw:'ÇİZ'};
+const PHASE_DUR=900; // frames per phase before rotating
+
+// entities
+let player, obstacles, orbs, pathPoints, dragging;
+
+function resetState(){
+  score=0; t=0; phaseIdx=0; phaseTimer=0;
+  player = {x:W*0.28, y:H*0.55, vy:0, r:16, size:16};
+  obstacles=[]; orbs=[]; pathPoints=[]; dragging=false;
+  document.getElementById('score').textContent='0';
+  document.getElementById('phaseLabel').textContent = PHASE_LABEL[PHASES[0]];
+}
+
+function startGame(){
+  show('game'); resizeGame(); resetState(); running=true;
+  requestAnimationFrame(loop);
+}
+
+function endGame(){
+  running=false;
+  const best = loadBest();
+  if(score>best) saveBest(score);
+  reportScoreToNative(score);
+  document.getElementById('overScore').textContent = score;
+  document.getElementById('overBest').textContent = 'En iyi skor: ' + Math.max(score,best);
+  show('over');
+}
+
+// input
+let pointerY = H/2, pointerActive=false, lastPX=0, lastPY=0;
+function px(e){ return (e.touches? e.touches[0].clientX : e.clientX); }
+function py(e){ return (e.touches? e.touches[0].clientY : e.clientY); }
+cv.addEventListener('pointerdown', e=>{ pointerActive=true; lastPX=e.clientX; lastPY=e.clientY;
+  const phase=PHASES[phaseIdx];
+  if(phase==='jump'){ player.vy = -9.5; }
+  if(phase==='grow'){ player.size = Math.min(player.size+2.2, 60); }
+  if(phase==='draw'){ pathPoints=[{x:e.clientX, y:e.clientY - cv.getBoundingClientRect().top}]; }
+});
+cv.addEventListener('pointermove', e=>{
+  if(!pointerActive) return;
+  const rect = cv.getBoundingClientRect();
+  pointerY = e.clientY - rect.top;
+  const phase=PHASES[phaseIdx];
+  if(phase==='swipe'){ player.x += (e.clientX-lastPX); player.x=Math.max(24,Math.min(W-24,player.x)); lastPX=e.clientX; }
+  if(phase==='draw'){ pathPoints.push({x:e.clientX, y:e.clientY-rect.top}); if(pathPoints.length>40) pathPoints.shift(); }
+});
+addEventListener('pointerup', ()=>{ pointerActive=false; });
+
+function spawnObstacle(){
+  const gapY = 120 + Math.random()*(H-300);
+  obstacles.push({x:W+30, gapY, gapH:170, w:34, passed:false});
+}
+function spawnOrb(){
+  orbs.push({x:W+20, y:40+Math.random()*(H-80), r:10, good:Math.random()>0.28});
+}
+
+function updateJump(){
+  player.vy += 0.5; player.y += player.vy;
+  if(player.y>H-40){ player.y=H-40; return endGame(); }
+  if(player.y<20){ player.y=20; player.vy=0; }
+  if(t%80===0) spawnObstacle();
+  for(const o of obstacles){
+    o.x -= 3.6;
+    if(!o.passed && o.x < player.x){ o.passed=true; score++; document.getElementById('score').textContent=score; }
+    const hitX = Math.abs(o.x-player.x) < o.w/2+player.r;
+    const inGap = player.y > o.gapY-o.gapH/2 && player.y < o.gapY+o.gapH/2;
+    if(hitX && !inGap) endGame();
+  }
+  obstacles = obstacles.filter(o=>o.x>-40);
+}
+function updateSwipe(){
+  if(t%40===0) spawnOrb();
+  for(const orb of orbs){
+    orb.y += 3.2;
+    const dx=orb.x-player.x, dy=orb.y-player.y;
+    if(dx*dx+dy*dy < (orb.r+player.r)*(orb.r+player.r)){
+      orb.hit=true;
+      if(orb.good){ score+=2; document.getElementById('score').textContent=score; }
+      else { endGame(); }
+    }
+  }
+  orbs = orbs.filter(o=>o.y<H+20 && !o.hit);
+}
+function updateGrow(){
+  if(t%70===0) spawnObstacle();
+  for(const o of obstacles){ o.x -= 3.2;
+    if(!o.passed && o.x < player.x){ o.passed=true; score++; document.getElementById('score').textContent=score; }
+    const hitX = Math.abs(o.x-player.x) < o.w/2+player.size;
+    const inGap = Math.abs(H*0.55-o.gapY) < o.gapH/2 - player.size*0.6;
+    if(hitX && !inGap) endGame();
+  }
+  obstacles=obstacles.filter(o=>o.x>-40);
+  player.size = Math.max(16, player.size-0.15);
+}
+function updateDraw(){
+  if(t%55===0) spawnOrb();
+  if(pathPoints.length>1){
+    const head=pathPoints[pathPoints.length-1];
+    player.x += (head.x-player.x)*0.25; player.y += (head.y-player.y)*0.25;
+  }
+  for(const orb of orbs){ orb.x -= 3.4;
+    const dx=orb.x-player.x, dy=orb.y-player.y;
+    if(dx*dx+dy*dy < (orb.r+player.r)*(orb.r+player.r)){
+      orb.hit=true;
+      if(orb.good){ score+=2; document.getElementById('score').textContent=score; } else { endGame(); }
+    }
+  }
+  orbs=orbs.filter(o=>o.x>-20 && !o.hit);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(20,26,51,0.0)';
+  // obstacles
+  ctx.fillStyle='#2a3358';
+  for(const o of obstacles){
+    ctx.fillRect(o.x-o.w/2, 0, o.w, o.gapY-o.gapH/2);
+    ctx.fillRect(o.x-o.w/2, o.gapY+o.gapH/2, o.w, H-(o.gapY+o.gapH/2));
+  }
+  // orbs
+  for(const orb of orbs){
+    ctx.beginPath(); ctx.fillStyle = orb.good? '#6ee7ff':'#ff5a7a';
+    ctx.arc(orb.x, orb.y, orb.r, 0, 7); ctx.fill();
+  }
+  // path trail
+  if(PHASES[phaseIdx]==='draw' && pathPoints.length>1){
+    ctx.strokeStyle='rgba(110,231,255,0.35)'; ctx.lineWidth=6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(pathPoints[0].x,pathPoints[0].y);
+    for(const p of pathPoints) ctx.lineTo(p.x,p.y);
+    ctx.stroke();
+  }
+  // player
+  const grd = ctx.createRadialGradient(player.x,player.y,2,player.x,player.y,(player.size||player.r)+6);
+  grd.addColorStop(0,'#ffffff'); grd.addColorStop(0.4,'#6ee7ff'); grd.addColorStop(1,'#ff7ab8');
+  ctx.fillStyle=grd;
+  ctx.beginPath(); ctx.arc(player.x,player.y,(PHASES[phaseIdx]==='grow'?player.size:player.r),0,7); ctx.fill();
+}
+
+function loop(){
+  if(!running) return;
+  t++; phaseTimer++;
+  const phase=PHASES[phaseIdx];
+  if(phase==='jump') updateJump();
+  else if(phase==='swipe') updateSwipe();
+  else if(phase==='grow') updateGrow();
+  else if(phase==='draw') updateDraw();
+
+  if(phaseTimer>PHASE_DUR){
+    phaseTimer=0; phaseIdx=(phaseIdx+1)%PHASES.length;
+    obstacles=[]; orbs=[]; pathPoints=[];
+    player.x=W*0.28; player.y=H*0.5; player.vy=0; player.size=16;
+    document.getElementById('phaseLabel').textContent = PHASE_LABEL[PHASES[phaseIdx]];
+  }
+  draw();
+  if(running) requestAnimationFrame(loop);
+}
+
+})();
+</script>
+</body>
+</html>
